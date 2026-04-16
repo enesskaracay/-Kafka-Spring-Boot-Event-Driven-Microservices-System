@@ -1,0 +1,14 @@
+target/
+*.class
+*.jar
+.idea/
+*.iml
+.DS_Store
+*.log
+
+out/
+
+# Maven
+build/
+
+# OS
