@@ -2,6 +2,7 @@ package com.example.notificationservice.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import java.time.LocalDateTime;
 
 import java.time.Instant;
 
@@ -9,17 +10,18 @@ import java.time.Instant;
 @Table(name = "notification_history")
 @Data
 public class NotificationHistory {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     private Long orderId;
+    private String message;
+    private LocalDateTime sentAt;
+    private String status;
 
-    @Column(length = 1000)
-    private String message; // Müşteriye giden asıl mesaj
+    // 🚀 İŞTE KRİTİK ALAN:
+    @Column(unique = true)
+    private String eventId;
 
-    private String status; // Başarılı mı, Başarısız mı?
 
-    private Instant sentAt = Instant.now();
 }
