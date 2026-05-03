@@ -1,111 +1,139 @@
 version: '3.8'
 
 services:
-  # 1. VERİTABANI (PostgreSQL)
-  postgres:
-    image: postgres:15-alpine
+  eureka-server:
+    image: eureka-server:v1
+    container_name: eureka-server
+    ports: ["8761:8761"]
+    networks: [backend-network]
+    restart: always
+
+  # --- VERİTABANLARI ---
+  postgres-db: # Payment için
+    image: postgres:15
     container_name: postgres-db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password 
-      POSTGRES_DB: microservices_db
-    ports:
-      - "5432:5432"
-    networks:
-      - micro-network
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: payment_db 
+    volumes: [payment_db_data:/var/lib/postgresql/data]
+    networks: [backend-network]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d payment_db"]
+      interval: 10s
+      retries: 5
 
-  # 2. ZOOKEEPER (Kafka'nın çalışması için şart)
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.4.0
-    container_name: zookeeper
+  order-db: # Order Service için
+    image: postgres:15
+    container_name: order-db
     environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    networks:
-      - micro-network
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: order_db
+    volumes: [order_db_data:/var/lib/postgresql/data]
+    networks: [backend-network]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d order_db"]
+      interval: 10s
+      retries: 5
 
-  # 3. KAFKA SUNUCUSU
+  notification-db: # Notification Service için
+    image: postgres:15
+    container_name: notification-db
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: notification_db
+    volumes: [notification_db_data:/var/lib/postgresql/data]
+    networks: [backend-network]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d notification_db"]
+      interval: 10s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports: ["6379:6379"]
+    volumes: [redis_data:/data]
+    networks: [backend-network]
+    restart: always
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: zookeeper-1
+    environment: {ZOOKEEPER_CLIENT_PORT: 2181}
+    networks: [backend-network]
+
   kafka:
-    image: confluentinc/cp-kafka:7.4.0
-    container_name: kafka
-    depends_on:
-      - zookeeper
-    ports:
-      - "9092:9092"
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka-1
+    depends_on: [zookeeper]
+    ports: ["9092:9092"]
     environment:
       KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-    networks:
-      - micro-network
+    networks: [backend-network]
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 9092 || exit 1"]
+      interval: 10s
+      retries: 10
 
-  # 4. EUREKA SERVER (Santral)
-  eureka-server:
-    build: ./eureka-server
-    container_name: eureka-server
-    ports:
-      - "8761:8761"
-    networks:
-      - micro-network
-
-  # 5. ORDER SERVICE
-  order-service:
-    build: ./order-service
-    container_name: order-service
-    ports:
-      - "8081:8081"
-    depends_on:
-      - postgres
-      - kafka
-      - eureka-server
-    environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/microservices_db
-      - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=password
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
-    networks:
-      - micro-network
-
-  # 6. PAYMENT SERVICE
+  # --- MİKROSERVİSLER ---
   payment-service:
-    build: ./payment-service
+    image: payment-service:v1
     container_name: payment-service
-    ports:
-      - "8082:8082"
     depends_on:
-      - postgres
-      - kafka
-      - eureka-server
+      postgres-db: {condition: service_healthy}
+      kafka: {condition: service_healthy}
+      eureka-server: {condition: service_started}
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/microservices_db
-      - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=password
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/payment_db
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      # 🚀 BURASI KRİTİK: Alt çizgiler ve büyük harflerle Docker'a rotayı zorla öğretiyoruz
+      - SPRING_DATA_REDIS_HOST=redis
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
-    networks:
-      - micro-network
+      - SPRING_KAFKA_CONSUMER_VALUE_DESERIALIZER=org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      - SPRING_KAFKA_CONSUMER_PROPERTIES_SPRING_DESERIALIZER_VALUE_DELEGATE_CLASS=org.springframework.kafka.support.serializer.JsonDeserializer
+      - SPRING_KAFKA_CONSUMER_PROPERTIES_SPRING_JSON_TRUSTED_PACKAGES=*
+      - SPRING_KAFKA_CONSUMER_PROPERTIES_SPRING_JSON_VALUE_DEFAULT_TYPE=com.example.paymentservice.event.OrderCreatedEvent
+    networks: [backend-network]
+    deploy: {resources: {limits: {memory: 768M, cpus: "0.5"}}}
 
-  # 7. NOTIFICATION SERVICE
-  notification-service:
-    build: ./notification-service
-    container_name: notification-service
-    ports:
-      - "8083:8083"
+  order-service:
+    image: order-service:v1
+    container_name: order-service
     depends_on:
-      - kafka
-      - eureka-server
+      order-db: {condition: service_healthy}
+      kafka: {condition: service_healthy}
+      eureka-server: {condition: service_started}
     environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://order-db:5432/order_db
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - SPRING_DATA_REDIS_HOST=redis
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
+    networks: [backend-network]
+
+  notification-service:
+    image: notification-service:v1
+    container_name: notification-service
+    depends_on:
+      notification-db: {condition: service_healthy}
+      kafka: {condition: service_healthy}
+      eureka-server: {condition: service_started}
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://notification-db:5432/notification_db
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
-    networks:
-      - micro-network
+    networks: [backend-network]
 
 networks:
-  micro-network:
-    driver: bridge
+  backend-network: {driver: bridge}
+
+volumes:
+  payment_db_data:
+  order_db_data:
+  notification_db_data:
+  redis_data:

@@ -1,14 +1,28 @@
-# Projeni hangi Java sürümüyle yazdıysan onu seç (17, 19, veya 21)
-FROM eclipse-temurin:19-jdk-alpine
+# --- 1. AŞAMA: Build (İnşa) ---
+# Java 17 ve Maven içeren imajı kullanıyoruz.
+# Bu aşama sadece JAR üretmek için var.
+FROM maven:3.9.4-eclipse-temurin-17 AS build
+WORKDIR /app
 
-# İçeride geçici bir klasör oluşturur
-VOLUME /tmp
+# Sadece pom.xml'i kopyalayıp kütüphaneleri önden indiriyoruz.
+# Bu, kod değişikliğinde kütüphaneleri tekrar indirmemeyi (Caching) sağlar.
+COPY pom.xml .
+RUN mvn dependency:go-offline
 
-# Hedef klasöründeki derlenmiş .jar dosyasını bulur
-ARG JAR_FILE=target/*.jar
+# Kodun tamamını kopyalayıp JAR dosyasını üretiyoruz.
+COPY src ./src
+RUN mvn clean package -DskipTests
 
-# O jar dosyasını konteynerin içine 'app.jar' adıyla kopyalar
-COPY ${JAR_FILE} app.jar
+# --- 2. AŞAMA: Runtime (Çalışma) ---
+# Sadece hafif bir Java 17 JRE kullanıyoruz (Boyutu 3 kat küçültür).
+FROM eclipse-temurin:17-jre-jammy
+WORKDIR /app
 
-# Konteyner çalışınca bu komutu tetikler: java -jar app.jar
-ENTRYPOINT ["java","-jar","/app.jar"]
+# İlk aşamada üretilen o ağır JAR dosyasını buraya "app.jar" olarak kopyalıyoruz.
+COPY --from=build /app/target/*.jar app.jar
+
+# Uygulama hangi porttan konuşacak?
+EXPOSE 8081
+
+# Çalıştırma komutu
+ENTRYPOINT ["java", "-jar", "app.jar"]

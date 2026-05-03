@@ -2,7 +2,7 @@ package com.example.orderservice.kafka;
 
 import com.example.orderservice.entity.OrderStatus;
 import com.example.orderservice.event.PaymentProcessedEvent;
-import com.example.orderservice.service.OrderService;
+import com.example.orderservice.service.OrderServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class OrderUpdateConsumer {
 
-    private final OrderService orderService;
+    private final OrderServiceImpl orderService;
 
     @KafkaListener(topics = "payment-processed", groupId = "order-update-group")
     public void consume(PaymentProcessedEvent event) {

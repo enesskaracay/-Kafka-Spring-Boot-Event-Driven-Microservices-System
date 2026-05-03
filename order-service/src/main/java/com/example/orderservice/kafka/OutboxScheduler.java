@@ -20,6 +20,7 @@ public class OutboxScheduler {
     @Scheduled(fixedRate = 5000)
     public void processOutboxEvents() {
         // Sadece "PENDING" olanları al
+        System.out.println("⏳ Outbox Scheduler uyandı ve kontrol yapıyor...");
         List<OutboxEvent> pendingEvents = outboxEventRepository.findByStatus("PENDING");
 
         for (OutboxEvent event : pendingEvents) {

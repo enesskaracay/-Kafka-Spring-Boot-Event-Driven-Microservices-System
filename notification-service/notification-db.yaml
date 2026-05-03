@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-db
+spec:
+  selector:
+    matchLabels:
+      app: notification-db
+  template:
+    metadata:
+      labels:
+        app: notification-db
+    spec:
+      containers:
+        - name: notification-db
+          image: postgres:15
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: root
+            - name: POSTGRES_PASSWORD
+              value: root
+            - name: POSTGRES_DB
+              value: notification_db
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-db
+spec:
+  selector:
+    app: notification-db
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432

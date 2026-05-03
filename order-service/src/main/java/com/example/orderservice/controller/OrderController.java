@@ -1,30 +1,38 @@
 package com.example.orderservice.controller;
 
-import com.example.orderservice.entity.Order;
-import com.example.orderservice.service.OrderService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
 import com.example.orderservice.dto.CreateOrderRequest;
+import com.example.orderservice.dto.OrderResponse; // 🚀 Yeni eklendi
+import com.example.orderservice.entity.Order;
+import com.example.orderservice.service.OrderService; // 🚀 Interface olanı kullanıyoruz
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor; // 🚀 Constructor injection için
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/orders")
+@RequiredArgsConstructor // 🚀 @Autowired yerine constructor injection (Sektör Standardı)
 public class OrderController {
 
-    @Autowired
-    private OrderService orderService;
+    private final OrderService orderService; // 🚀 Interface üzerinden iletişim
 
-    // GET /orders -> tüm siparişleri getir
+    // GET /orders -> Tüm siparişleri getir (Liste Cache tetiklenir)
     @GetMapping
-    public List<Order> getAllOrders() {
-        return orderService.getAllOrders();
+    public ResponseEntity<List<OrderResponse>> getAllOrders() {
+        return ResponseEntity.ok(orderService.getAllOrders());
     }
 
-    // POST /orders -> yeni sipariş ekle ve Kafka'ya gönder
+    // GET /orders/{id} -> Tekil sipariş getir (Detay Cache tetiklenir)
+    @GetMapping("/{id}")
+    public ResponseEntity<OrderResponse> getOrderById(@PathVariable Long id) {
+        return ResponseEntity.ok(orderService.getOrderById(id));
+    }
+
+    // POST /orders -> Yeni sipariş ekle (Outbox yazar & Liste Cache'i temizler)
     @PostMapping
-    public Order createOrder(@Valid @RequestBody CreateOrderRequest request) {
-        return orderService.createOrder(request);
+    public ResponseEntity<Order> createOrder(@Valid @RequestBody CreateOrderRequest request) {
+        return ResponseEntity.ok(orderService.createOrder(request));
     }
 }

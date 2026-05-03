@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-db
+spec:
+  selector:
+    matchLabels:
+      app: order-db
+  template:
+    metadata:
+      labels:
+        app: order-db
+    spec:
+      containers:
+        - name: order-db
+          image: postgres:15
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: root
+            - name: POSTGRES_PASSWORD
+              value: root
+            - name: POSTGRES_DB
+              value: order_db
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-db # Order Service tam olarak bu ismi arıyor!
+spec:
+  selector:
+    app: order-db
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432

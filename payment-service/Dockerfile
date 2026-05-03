@@ -1,14 +1,16 @@
-# Projeni hangi Java sürümüyle yazdıysan onu seç (17, 19, veya 21)
-FROM eclipse-temurin:19-jdk-alpine
+# --- 1. AŞAMA: Build ---
+FROM maven:3.9.4-eclipse-temurin-17 AS build
+WORKDIR /app
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
+COPY src ./src
+RUN mvn clean package -DskipTests
 
-# İçeride geçici bir klasör oluşturur
+# --- 2. AŞAMA: Runtime ---
+FROM eclipse-temurin:17-jre-jammy
+WORKDIR /app
+COPY --from=build /app/target/*.jar app.jar
 VOLUME /tmp
-
-# Hedef klasöründeki derlenmiş .jar dosyasını bulur
-ARG JAR_FILE=target/*.jar
-
-# O jar dosyasını konteynerin içine 'app.jar' adıyla kopyalar
-COPY ${JAR_FILE} app.jar
-
-# Konteyner çalışınca bu komutu tetikler: java -jar app.jar
-ENTRYPOINT ["java","-jar","/app.jar"]
+EXPOSE 8082
+# Ödeme servisi kritik olduğu için bellek sınırını koruyoruz
+ENTRYPOINT ["java", "-Xmx512m", "-jar", "app.jar"]
